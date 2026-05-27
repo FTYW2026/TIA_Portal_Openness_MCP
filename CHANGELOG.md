@@ -7,6 +7,7 @@
 - Git 跟踪 `tools/tiaportal-mcp/src/TiaMcpServer/bin/Release/net48/`（V21）与 `bin-v20/Release/net48/`（V20）已编译 `TiaMcpServer.exe` 及依赖 DLL；`.gitignore` 仅排除 `bin/Debug`、`bin-v20/Debug` 与 `obj`，不再排除 Release 产物。
 - [GitHub Releases / v0.0.29](https://github.com/bulaofen0036-coder/TIA_MCP_260514/releases/tag/v0.0.29) 提供 **`TIA_MCP_完整交付包_v0.0.29.zip`**：与仓库根目录内容一致（含双版本 exe），打包时排除 `.git` 与 `TiaMcp_Output/`。
 - `manifest/package-manifest.json`：`bundleVersion` **0.0.29**，`refreshedAt` / `validationSnapshot.performedAt` 对齐本次推送。
+- 增强编译错误回传：递归展开 `CompilerResult.Messages`，返回叶子级诊断（含 `Path`/`Description`，并统计 `errorDetailCount`/`warningDetailCount`）。
 
 ## [0.0.28] - 2026-05-26
 
