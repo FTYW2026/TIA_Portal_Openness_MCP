@@ -10953,6 +10953,33 @@ namespace TiaMcpServer.Siemens
             }
         }
 
+        // Openness rejects an XML whose <Engineering version="Vxx"/> is newer than the
+        // connected portal ("The engineering version 'V21' ... is not supported."). The XML
+        // builders historically hardcode V21, so on a V20 portal every import fails. Rewrite
+        // the header to the detected major version into a temp copy (user files untouched).
+        private static string NormalizeEngineeringVersion(string path)
+        {
+            try
+            {
+                int major = Engineering.TiaMajorVersion;
+                if (major <= 0) return path; // version unknown -> import as-is
+                var bytes = File.ReadAllBytes(path);
+                bool hasBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+                var text = File.ReadAllText(path, Encoding.UTF8);
+                var replaced = Regex.Replace(text,
+                    "<Engineering\\s+version=\"V\\d+\"\\s*/>",
+                    $"<Engineering version=\"V{major}\" />");
+                if (replaced == text) return path; // already matches -> no rewrite
+                var tmp = Path.Combine(Path.GetTempPath(), "tia_mcp_engver_" + Guid.NewGuid().ToString("N") + ".xml");
+                File.WriteAllText(tmp, replaced, new UTF8Encoding(hasBom));
+                return tmp;
+            }
+            catch
+            {
+                return path; // best effort; on any failure import the original file
+            }
+        }
+
         public bool ImportBlock(string softwarePath, string groupPath, string importPath)
         {
             _logger?.LogInformation($"Importing block from path: {importPath}");
@@ -10975,9 +11002,9 @@ namespace TiaMcpServer.Siemens
                     throw new PortalException(PortalErrorCode.NotFound,
                         $"PLC block group not found for groupPath='{groupPath}'; use empty string for root program blocks");
 
-                var fileInfo = new FileInfo(importPath);
-                if (!fileInfo.Exists)
+                if (!new FileInfo(importPath).Exists)
                     throw new PortalException(PortalErrorCode.InvalidParams, $"Import file not found: {importPath}");
+                var fileInfo = new FileInfo(NormalizeEngineeringVersion(importPath));
 
                 var imported = group.Blocks.Import(fileInfo, ImportOptions.Override);
                 if (imported == null || imported.Count == 0)
@@ -11065,12 +11092,12 @@ namespace TiaMcpServer.Siemens
 
                     try
                     {
-                        var fi = new FileInfo(file);
-                        if (!fi.Exists)
+                        if (!new FileInfo(file).Exists)
                         {
                             failed.Add(new ImportFailure { Path = file, Error = "File not found" });
                             continue;
                         }
+                        var fi = new FileInfo(NormalizeEngineeringVersion(file));
 
                         if (!overwrite)
                         {
@@ -11136,9 +11163,9 @@ namespace TiaMcpServer.Siemens
                     throw new PortalException(PortalErrorCode.NotFound,
                         $"PLC type group not found for groupPath='{groupPath}'; use empty string for root PLC data types");
 
-                var fileInfo = new FileInfo(importPath);
-                if (!fileInfo.Exists)
+                if (!new FileInfo(importPath).Exists)
                     throw new PortalException(PortalErrorCode.InvalidParams, $"Import file not found: {importPath}");
+                var fileInfo = new FileInfo(NormalizeEngineeringVersion(importPath));
 
                 var imported = group.Types.Import(fileInfo, ImportOptions.Override);
                 if (imported == null || imported.Count == 0)

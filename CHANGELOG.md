@@ -1,5 +1,14 @@
 # Change Log
 
+## [0.0.30] - 2026-05-28
+
+### 修复：V20 导入报「engineering version 'V21' is not supported」
+
+- **故障现象**：在 TIA Portal V20 上调用 `PlcBuildAndImport` / `ImportBlock` / `ImportType` 时，导入失败并报错 `The engineering version 'V21' in line 3, position 16 is not supported.`，DB/FC/FB/UDT 全部无法导入。
+- **根因**：`Program.cs` 中 21 处 XML 生成器把块头 `<Engineering version="V21"/>` 写死。0.0.28 的双 binary 只解决了 DLL/IL 程序集绑定，并未修正 XML 里的版本号；V20 用户即便跑 V20 exe、能连上、能 dryRun，一旦真导入仍因版本号高于所连博途而被拒。
+- **修复**：在导入边界集中归一化，而非逐个改 21 处字面量。`Siemens/Portal.cs` 新增 `NormalizeEngineeringVersion(path)`：导入前把文件中的 `<Engineering version="V\d+"/>` 改写为运行时检测到的 `Engineering.TiaMajorVersion`，写入临时副本（**不修改用户原文件、保留 BOM**），再交给 Openness 导入。已接入 `ImportBlock`、`ImportType`、批量导入循环三处；`.s7dcl` 的 `ImportFromDocuments` 路径不含该字段，无需改动。
+- **影响**：V20/V21 两版客户端无需改调用方式，导入自动匹配所连博途版本。改完需重新编译 `TiaMcpServer.exe` 方可生效。
+
 ## [0.0.29] - 2026-05-26
 
 ### 完整交付包（含运行时）+ GitHub Release
