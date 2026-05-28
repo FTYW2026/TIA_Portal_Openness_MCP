@@ -2552,19 +2552,11 @@ namespace TiaMcpServer.ModelContextProtocol
 
         private static ResponseCompile BuildCompileResponse(string softwarePath, object result)
         {
-            var messages = new List<string>();
+            var collected = new CompilerMessageCollectResult();
             try
             {
                 var messagesValue = result.GetType().GetProperty("Messages")?.GetValue(result);
-                if (messagesValue is System.Collections.IEnumerable enumerable && messagesValue is not string)
-                {
-                    foreach (var message in enumerable)
-                    {
-                        var formatted = FormatCompilerMessage(message);
-                        if (!string.IsNullOrWhiteSpace(formatted))
-                            messages.Add(formatted!);
-                    }
-                }
+                collected = CollectCompilerMessages(messagesValue);
             }
             catch
             {
@@ -2580,11 +2572,13 @@ namespace TiaMcpServer.ModelContextProtocol
                 State = state,
                 ErrorCount = errorCount,
                 WarningCount = warningCount,
-                Messages = messages,
+                Messages = collected.Raw,
                 Meta = new JsonObject
                 {
                     ["timestamp"] = DateTime.Now,
-                    ["success"] = !state.Equals("Error", StringComparison.OrdinalIgnoreCase)
+                    ["success"] = !state.Equals("Error", StringComparison.OrdinalIgnoreCase),
+                    ["errorDetailCount"] = collected.Errors.Count,
+                    ["warningDetailCount"] = collected.Warnings.Count
                 }
             };
         }
@@ -5053,16 +5047,7 @@ namespace TiaMcpServer.ModelContextProtocol
                 var result = Portal.CompileSoftware(softwarePath, password);
                 if (result != null)
                 {
-                    var messages = new List<string>();
-                    try
-                    {
-                        if (result.Messages != null)
-                            messages.AddRange(result.Messages.Select(FormatCompilerMessage).Where(s => !string.IsNullOrWhiteSpace(s))!);
-                    }
-                    catch
-                    {
-                        // best effort only
-                    }
+                    var collected = CollectCompilerMessages(result.Messages);
 
                     return new ResponseCompile
                     {
@@ -5070,11 +5055,13 @@ namespace TiaMcpServer.ModelContextProtocol
                         State = result.State.ToString(),
                         ErrorCount = result.ErrorCount,
                         WarningCount = result.WarningCount,
-                        Messages = messages,
+                        Messages = collected.Raw,
                         Meta = new JsonObject
                         {
                             ["timestamp"] = DateTime.Now,
-                            ["success"] = !result.State.ToString().Equals("Error", StringComparison.OrdinalIgnoreCase)
+                            ["success"] = !result.State.ToString().Equals("Error", StringComparison.OrdinalIgnoreCase),
+                            ["errorDetailCount"] = collected.Errors.Count,
+                            ["warningDetailCount"] = collected.Warnings.Count
                         }
                     };
                 }
@@ -5245,6 +5232,176 @@ namespace TiaMcpServer.ModelContextProtocol
             }
         }
 
+        private sealed class CompilerMessageCollectResult
+        {
+            public List<string> Raw { get; } = new List<string>();
+            public List<string> Errors { get; } = new List<string>();
+            public List<string> Warnings { get; } = new List<string>();
+            public List<string> Info { get; } = new List<string>();
+        }
+
+        private static CompilerMessageCollectResult CollectCompilerMessages(object? messagesRoot)
+        {
+            var collected = new CompilerMessageCollectResult();
+            if (messagesRoot is System.Collections.IEnumerable enumerable && messagesRoot is not string)
+            {
+                foreach (var message in enumerable)
+                    WalkCompilerMessageNode(message, collected);
+            }
+            return collected;
+        }
+
+        private static void WalkCompilerMessageNode(object? message, CompilerMessageCollectResult collected)
+        {
+            if (message == null) return;
+
+            var formatted = FormatCompilerMessage(message);
+            if (!string.IsNullOrWhiteSpace(formatted))
+            {
+                collected.Raw.Add(formatted!);
+                ClassifyCompilerMessage(message, formatted!, collected);
+            }
+
+            if (!TryGetCompilerMessageChildren(message, out var children)) return;
+            foreach (var child in children)
+                WalkCompilerMessageNode(child, collected);
+        }
+
+        private static void ClassifyCompilerMessage(object message, string formatted, CompilerMessageCollectResult collected)
+        {
+            var state = ReadCompilerMessageState(message);
+            var description = ReadCompilerMessageProperty(message, "Description") ?? string.Empty;
+            var hasChildren = HasCompilerMessageChildren(message);
+
+            if (IsCompilerSummaryDescription(description))
+                return;
+
+            if (IsCompilerErrorState(state))
+            {
+                if (!hasChildren || !string.IsNullOrWhiteSpace(description))
+                    AddUniqueCompilerLine(collected.Errors, formatted);
+                return;
+            }
+
+            if (IsCompilerWarningState(state))
+            {
+                if (!hasChildren || !string.IsNullOrWhiteSpace(description))
+                    AddUniqueCompilerLine(collected.Warnings, formatted);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(description))
+                AddUniqueCompilerLine(collected.Info, formatted);
+        }
+
+        private static bool HasCompilerMessageChildren(object message)
+        {
+            return TryGetCompilerMessageChildren(message, out var children) && children.Count > 0;
+        }
+
+        private static bool TryGetCompilerMessageChildren(object message, out List<object> children)
+        {
+            children = new List<object>();
+            try
+            {
+                var messagesValue = message.GetType().GetProperty("Messages")?.GetValue(message);
+                if (messagesValue is System.Collections.IEnumerable enumerable && messagesValue is not string)
+                {
+                    foreach (var child in enumerable)
+                    {
+                        if (child != null)
+                            children.Add(child);
+                    }
+                }
+            }
+            catch
+            {
+                // best effort only
+            }
+
+            return children.Count > 0;
+        }
+
+        private static string? ReadCompilerMessageProperty(object message, string propertyName)
+        {
+            try
+            {
+                var value = message.GetType().GetProperty(propertyName)?.GetValue(message);
+                return value?.ToString();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string ReadCompilerMessageState(object message)
+        {
+            return ReadCompilerMessageProperty(message, "State") ?? string.Empty;
+        }
+
+        private static bool IsCompilerErrorState(string state)
+        {
+            if (string.IsNullOrWhiteSpace(state)) return false;
+            return state.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0
+                || state.IndexOf("fehler", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsCompilerWarningState(string state)
+        {
+            if (string.IsNullOrWhiteSpace(state)) return false;
+            return state.IndexOf("warning", StringComparison.OrdinalIgnoreCase) >= 0
+                || state.IndexOf("warnung", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsCompilerSummaryDescription(string? description)
+        {
+            if (string.IsNullOrWhiteSpace(description)) return false;
+            var text = description.Trim();
+            return text.StartsWith("Compiling finished", StringComparison.OrdinalIgnoreCase)
+                || text.StartsWith("Compilation finished", StringComparison.OrdinalIgnoreCase)
+                || text.StartsWith("Kompilierung beendet", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void AddUniqueCompilerLine(List<string> target, string line)
+        {
+            if (!target.Contains(line))
+                target.Add(line);
+        }
+
+        private static void AppendCompilerEngineeringAttributes(object message, List<string> parts)
+        {
+            var getAttribute = message.GetType().GetMethod(
+                "GetAttribute",
+                BindingFlags.Public | BindingFlags.Instance,
+                null,
+                new[] { typeof(string) },
+                null);
+            if (getAttribute == null) return;
+
+            foreach (var attrName in new[]
+            {
+                "Line", "Column", "BlockName", "Severity", "ErrorCode", "Message", "Text", "ObjectPath"
+            })
+            {
+                if (parts.Any(p => p.StartsWith(attrName + "=", StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                try
+                {
+                    var value = getAttribute.Invoke(message, new object[] { attrName });
+                    if (value == null) continue;
+                    var text = value.ToString();
+                    if (!string.IsNullOrWhiteSpace(text))
+                        parts.Add($"{attrName}={text}");
+                }
+                catch
+                {
+                    // attribute not supported on this message type
+                }
+            }
+        }
+
         private static string? FormatCompilerMessage(object? message)
         {
             if (message == null) return null;
@@ -5257,7 +5414,7 @@ namespace TiaMcpServer.ModelContextProtocol
                 foreach (var name in new[]
                 {
                     "State", "Severity", "ErrorCode", "Message", "Description", "Text",
-                    "Path", "ObjectPath", "BlockName", "Line", "Column"
+                    "Path", "ObjectPath", "BlockName", "Line", "Column", "DateTime"
                 })
                 {
                     var p = t.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
@@ -5269,24 +5426,26 @@ namespace TiaMcpServer.ModelContextProtocol
 
                     var s = value.ToString();
                     if (!string.IsNullOrWhiteSpace(s))
-                    {
                         parts.Add($"{name}={s}");
-                    }
                 }
+
+                AppendCompilerEngineeringAttributes(message, parts);
 
                 if (parts.Count == 0)
                 {
                     foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance))
                     {
                         if (p.GetIndexParameters().Length != 0) continue;
+                        if (string.Equals(p.Name, "Messages", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(p.Name, "Parent", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
                         object? value = null;
                         try { value = p.GetValue(message); } catch { }
                         if (value == null) continue;
                         var s = value.ToString();
                         if (!string.IsNullOrWhiteSpace(s) && s != t.FullName)
-                        {
                             parts.Add($"{p.Name}={s}");
-                        }
                     }
                 }
 
@@ -5852,25 +6011,20 @@ namespace TiaMcpServer.ModelContextProtocol
                     var result = Portal.CompileSoftware(softwarePath);
                     if (result != null)
                     {
-                        var messages = new List<string>();
-                        try
-                        {
-                            if (result.Messages != null)
-                                messages.AddRange(result.Messages.Select(FormatCompilerMessage).Where(s => !string.IsNullOrWhiteSpace(s))!);
-                        }
-                        catch { }
-
+                        var collected = CollectCompilerMessages(result.Messages);
                         compile = new ResponseCompile
                         {
                             Message = $"Software '{softwarePath}' compiled. State={result.State} Errors={result.ErrorCount} Warnings={result.WarningCount}",
                             State = result.State.ToString(),
                             ErrorCount = result.ErrorCount,
                             WarningCount = result.WarningCount,
-                            Messages = messages,
+                            Messages = collected.Raw,
                             Meta = new JsonObject
                             {
                                 ["timestamp"] = DateTime.Now,
-                                ["success"] = !result.State.ToString().Equals("Error", StringComparison.OrdinalIgnoreCase)
+                                ["success"] = !result.State.ToString().Equals("Error", StringComparison.OrdinalIgnoreCase),
+                                ["errorDetailCount"] = collected.Errors.Count,
+                                ["warningDetailCount"] = collected.Warnings.Count
                             }
                         };
                     }
@@ -5889,7 +6043,7 @@ namespace TiaMcpServer.ModelContextProtocol
             }
         }
 
-        [McpServerTool(Name = "CompileAndDiagnosePlc"), Description("[L1][PLC-Software] PREFERRED compile tool. Compiles PLC and returns a structured list of errors, warnings, and info messages with block names and line numbers. Requires: Connect + OpenProject. Call after every block import or code change. On errors: read the message, export the failing block for inspection, fix and re-import.")]
+        [McpServerTool(Name = "CompileAndDiagnosePlc"), Description("[L1][PLC-Software] PREFERRED compile tool. Compiles PLC and returns structured errors/warnings by recursively walking CompilerResult.Messages (V20/V21 PublicAPI). Leaf diagnostics include Path + Description; optional Line/Column via GetAttribute when exposed. Requires: Connect + OpenProject.")]
         public static ResponseCompileDiagnose CompileAndDiagnosePlc(
             [Description("softwarePath: PLC software path, e.g. 'PLC_1'")] string softwarePath,
             [Description("password: optional safety password")] string password = "")
@@ -5913,23 +6067,11 @@ namespace TiaMcpServer.ModelContextProtocol
 
                 try
                 {
-                    if (result.Messages != null)
-                    {
-                        foreach (var m in result.Messages)
-                        {
-                            var s = FormatCompilerMessage(m);
-                            if (string.IsNullOrWhiteSpace(s)) continue;
-                            raw.Add(s!);
-
-                            var ls = s!.ToLowerInvariant();
-                            if (ls.Contains("error") || ls.Contains("fehler") || ls.Contains("severity=error") || ls.Contains("state=error"))
-                                errs.Add(s);
-                            else if (ls.Contains("warning") || ls.Contains("warnung") || ls.Contains("severity=warning") || ls.Contains("state=warning"))
-                                warns.Add(s);
-                            else
-                                info.Add(s);
-                        }
-                    }
+                    var collected = CollectCompilerMessages(result.Messages);
+                    raw = collected.Raw;
+                    errs = collected.Errors;
+                    warns = collected.Warnings;
+                    info = collected.Info;
                 }
                 catch { }
 
@@ -5943,7 +6085,13 @@ namespace TiaMcpServer.ModelContextProtocol
                     Warnings = warns,
                     Info = info,
                     RawMessages = raw,
-                    Meta = new JsonObject { ["timestamp"] = DateTime.Now, ["success"] = !result.State.ToString().Equals("Error", StringComparison.OrdinalIgnoreCase) }
+                    Meta = new JsonObject
+                    {
+                        ["timestamp"] = DateTime.Now,
+                        ["success"] = !result.State.ToString().Equals("Error", StringComparison.OrdinalIgnoreCase),
+                        ["errorDetailCount"] = errs.Count,
+                        ["warningDetailCount"] = warns.Count
+                    }
                 };
             }
             catch (Exception ex) when (ex is not McpException)
