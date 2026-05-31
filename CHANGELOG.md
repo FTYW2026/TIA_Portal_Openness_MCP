@@ -1,5 +1,16 @@
 # Change Log
 
+## [0.0.37] - 2026-05-31
+
+### 错误处理统一（E）— 消除 LastXxxError 侧信道，统一为 PortalException
+
+- 6 个错误域逐域改造（Connect/Hmi/PlcGen/Compile/Import/AddDevice）：`Portal.cs` 方法失败由 `return false/null` + 可变 `LastXxxError` 侧信道字段，统一为 `throw PortalException(code, msg)`；`McpServer.cs` 工具层统一 `catch (PortalException)` → `McpException("...[{Code}]: {msg}")`，结构化错误码进消息。
+- 删除 5 个侧信道字段：`LastHmiError`/`LastPlcGenError`/`LastCompileError`/`LastImportError`/`LastAddDeviceError`。`LastConnectError` 故意保留（成功路径向 Bootstrap 提供诊断、且 OpenProject/OpenSession 共用失败分支，非纯错误通道）。
+- `throw PortalException` 19→90 处；`catch (PortalException)` 1→28 处。仅改动 `Portal.cs` + `McpServer.cs` 两个文件，净减 ~94 行。
+- **批量语义保留并修正**：所有 `*FromDirectory` / `ImportPlcProgramFromDirectory` / 分类导入助手逐项 `try/catch(PortalException)` 收集 `ImportFailure`；顺带修正了原先块/类型导入因已抛异常而"一条失败中断整批"的不一致（现与 tagtable/techobject 一致逐项收集）。
+- 行为保留：AddDeviceWithFallback 元组 Error、RepairAndReimportBlock 失败返回诊断不抛、CompileSoftware 返回 CompilerResult（其 State 表达编译结果≠硬失败）。AddDevice/Search 硬失败（关键词空/目录不可用）改抛属轻微改善，no-match 仍返回空列表。
+- 重建 V20/V21 exe（0.0.37，0 错误）。
+
 ## [0.0.36] - 2026-05-31
 
 ### 削减工具表面 — 移除 4 个纯别名工具（破坏式，仅影响直呼旧名的脚本）
