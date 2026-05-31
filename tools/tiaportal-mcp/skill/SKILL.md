@@ -284,6 +284,38 @@ Bootstrap → Connect → CreateProject(<dir>, <name>_<timestamp>)
 → SaveProject → Disconnect
 ```
 
+### Build a *complete* example project (not a 2-tag toy)
+
+When the user asks for a "demo / 示例 / example project", the minimal recipe above
+produces something that looks empty. A good example **must** include, at minimum:
+
+- **PLC:** ≥1 UDT (e.g. `UDT_Motor`), a global DB instanced from it, a tag table
+  with named I/O (not just `%I0.0`), and ≥2 logic blocks (e.g. an FB with the
+  control logic + an FC or OB1 that calls it). Reuse the verified blocks in
+  `demo-assets/plc/` (`UDT_Motor`, `FB_StartStop`, `FC_StartStop`, `Main`).
+- **HMI:** a styled Main screen built with the §12 aesthetic recipe (title bar +
+  status cards + buttons + IOField + indicator lamps) — **not** a bare button or
+  two. Do not stop at `EnsureStartStopUnifiedHmi`; that is a wiring shortcut, not a
+  finished screen. Always follow it with `ApplyUnifiedHmiScreenDesignJson` (§12).
+- **Binding:** every HMI tag bound to a real PLC tag through the connection (below).
+- Compile to `0/0` and `SaveProject` before declaring done.
+
+#### Standard HMI variable connection & driver (do this, every time)
+
+The non-standard binding users complain about comes from skipping these:
+
+1. **One connection, correct driver.** `EnsureUnifiedHmiConnection` (Unified) /
+   `HMI_Connection_1` (Classic) auto-selects the PLC driver from the CPU
+   `TypeIdentifier` (S7-1200/1500 vs 300/400). Never hand-name a driver; never
+   point two tag tables at different ad-hoc connection names.
+2. **Symbolic binding, not absolute.** Bind each HMI tag to a **named PLC tag**
+   (`ControllerTag` = `Conveyor.Start`, `AddressAccessMode=Symbolic`) — never to a
+   raw `%DB1.DBX0.0`. Absolute addresses break on PLC recompile/reorder.
+3. **Acquisition cycle 100 ms** for interactive controls; slower (1 s) for
+   read-only displays — don't leave everything on the default.
+4. The PLC tag/DB member **must exist before** the HMI tag binds to it, or the
+   binding silently drops. Build PLC side first, then HMI.
+
 ### Deploy to a real CPU
 
 ```
@@ -390,7 +422,90 @@ $resp = Send-Request 'tools/call' @{ name='PlcBuildAndImport'; arguments=@{
 } } 30000
 ```
 
-## 9. LAD native instructions (verified 2026-05-11 against `安全PLC`)
+## 9. Generating LAD — prefer S7DCL text over FlgNet XML
+
+**Decision rule (read this first):**
+
+| You want… | Use | Why |
+|---|---|---|
+| Any contact / coil / SR / compare / Move / math ladder | **S7DCL text** (`.s7dcl` + `.s7res`), import via `ImportBlocksFromScl` (documents path) | Concise, LLM-writable, round-trips, no UId/wire bookkeeping. The only practical way to author general ladder. |
+| A network that is purely *call one FC with parameters* | `ComposePlcLadFcBlockXml` / `BuildFlgNetCallXml` tool | The single supported XML builder — it **only** does FC-call networks |
+| General ladder as hand-written FlgNet XML | **avoid** | Brittle (decimal-vs-hex `UId`, manual wire graph, entity escaping). This is the usual cause of "梯形图报错". |
+
+There is **no MCP tool that builds contact/coil/compare FlgNet XML** (`LadNetworkBuilder` is not wired up). So for normal ladder, **write `.s7dcl`** — do not hand-roll FlgNet XML.
+
+### 9a. LAD via S7DCL (PREFERRED, verified V21 round-trip)
+
+Author two paired files, **both UTF-8 *with* BOM**:
+- `Name.s7dcl` — block declaration + LAD networks
+- `Name.s7res` — `MLC_*` text IDs → localized strings (**this is where Chinese comments/titles live**)
+
+Verified references — copy these, change names + logic:
+```
+skill/lad-cookbook/MCPVerify_FC_LAD.s7dcl  + .s7res   (FC: 串联/并联/SR/比较/Move/Add)
+skill/lad-cookbook/MCPVerify_FB_LAD_v3.s7dcl + .s7res  (FB: 定时器放 Static)
+```
+
+Grammar (distilled from the verified sample):
+```
+{ S7_BlockComment := "MLC_548"; S7_BlockNumber := "901";
+  S7_BlockTitle := "MLC_4Vm"; S7_Optimized := "TRUE";
+  S7_PreferredLanguage := "LAD"; S7_Version := "0.1" }
+FUNCTION "MCPVerify_FC_LAD" : Void
+    VAR_INPUT  "A" : Bool; SET : Bool; VAL : Int; END_VAR
+    VAR_OUTPUT OUT_AND : Bool; OUT_SR : Bool; DST : Int; END_VAR
+
+    { S7_Language := "LAD"; S7_NetworkComment := "MLC_4X9"; S7_NetworkTitle := "MLC_3fA" }
+    NETWORK
+        RUNG wire#powerrail                       -- series AND
+            Contact( #"A" ) Contact( #"B" ) Coil( #OUT_AND )
+        END_RUNG
+    END_NETWORK
+
+    NETWORK                                        -- parallel OR via wire#w1
+        RUNG wire#powerrail Contact( #"A" ) wire#w1 Coil( #OUT_OR ) END_RUNG
+        RUNG wire#powerrail Contact( #"B" )        END_RUNG wire#w1
+    END_NETWORK
+
+    NETWORK RUNG wire#powerrail Contact( #SET )   S_Coil( #OUT_SR ) END_RUNG END_NETWORK
+    NETWORK RUNG wire#powerrail Contact( #RESET ) R_Coil( #OUT_SR ) END_RUNG END_NETWORK
+
+    NETWORK                                        -- compare: VAL > 100
+        RUNG wire#powerrail
+            { S7_Templates := "SrcType := Int" }
+            GT_Contact( in1 := #VAL, in2 := 100 ) Coil( #OUT_GT )
+        END_RUNG
+    END_NETWORK
+
+    NETWORK RUNG wire#powerrail Move( in := 42, out1 => #DST ) END_RUNG END_NETWORK
+    NETWORK
+        RUNG wire#powerrail
+            { S7_Templates := "SrcType := Int" }
+            Add( in1 := #V1, in2 := #V2, out => #SUM )
+        END_RUNG
+    END_NETWORK
+END_FUNCTION
+```
+Element vocabulary: `Contact`/`Coil`/`S_Coil`/`R_Coil`, parallel branches joined by a
+`wire#wN` label, `GT_Contact`/`LT_Contact`/… + `{ S7_Templates := "SrcType := Int" }`,
+`Move( in:=, out1=> )`, `Add`/`Sub`/`Mul`/`Div( in1:=, in2:=, out=> )`. `.s7res` `id:`
+values must match every `MLC_*` referenced in `.s7dcl`. For instructions not shown here
+(常闭/negated contact, edges, timers, `Calc`…), **export a real block that uses them with
+`ExportBlocksAsScl` and copy the exact `.s7dcl` syntax** — do not guess.
+
+Import:
+```
+ImportBlocksFromScl(softwarePath="<plc>", groupPath="", importPath="<dir-with-both-files>")
+CompileSoftware(softwarePath="<plc>")            ← errorCount must be 0
+```
+
+> **Boundary (known TIA limitation):** importing **LAD** from SD documents can fail
+> unless every `.s7res` item also has an **`en-US`** tag, not only `zh-CN`. The
+> bundled samples round-tripped on a V21 zh-CN machine with `zh-CN` only, but if
+> `ImportBlocksFromScl` fails on a LAD block, **add an `en-US:` line beside each
+> `zh-CN:` in the `.s7res`** and retry. (See README "Known Limitations".)
+
+### 9b. LAD via FlgNet XML (fallback — FC-call tool, or last-resort hand edit)
 
 LAD blocks live in `<FlgNet xmlns="http://.../FlgNet/v5">` with two collections:
 `Parts` (operands + instructions) and `Wires` (pin-to-pin energy flow).
@@ -627,6 +742,53 @@ All keys are **lowercase**. Colors are TIA ARGB hex `0xAARRGGBB` strings.
 Returns `meta.changed[]` (created/updated items) and `meta.failed[]` (per-property
 write failures, e.g. unknown property name).
 
+#### Complete dashboard `designJson` (copy this, don't ship a bare button)
+
+A 1024×768 starting point that looks finished — dark title bar, two status cards,
+Start/Stop buttons, a speed `IOField`, and a run-state lamp. Uses **only** the
+verified keys above; adjust text/positions, then bind buttons (`EnsureUnifiedHmiButtonAction`)
+and the IOField/lamp tags. This is the "rich + 美化" target; do not stop short of it.
+
+```jsonc
+{
+  "screen": { "BackColor": "0xFFF1F5F9" },
+  "items": [
+    { "type": "Rectangle", "name": "TitleBar", "left": 0, "top": 0, "width": 1024, "height": 72,
+      "properties": { "BackColor": "0xFF0F172A" } },
+    { "type": "Text", "name": "TitleText", "left": 24, "top": 20, "width": 600, "height": 36,
+      "text": "电机控制 · Motor Control", "font": { "Size": 22 },
+      "properties": { "ForeColor": "0xFFF8FAFC", "BackColor": "0x000F172A" } },
+
+    { "type": "Rectangle", "name": "CardRun", "left": 32, "top": 110, "width": 300, "height": 150,
+      "properties": { "BackColor": "0xFFFFFFFF", "BorderColor": "0xFFCBD5E1", "BorderWidth": 1 } },
+    { "type": "Text", "name": "CardRunLabel", "left": 52, "top": 126, "width": 260, "height": 28,
+      "text": "运行状态", "font": { "Size": 16 }, "properties": { "ForeColor": "0xFF334155", "BackColor": "0x00FFFFFF" } },
+    { "type": "Rectangle", "name": "RunLamp", "left": 52, "top": 170, "width": 40, "height": 40,
+      "properties": { "BackColor": "0xFF22C55E", "BorderColor": "0xFF15803D", "BorderWidth": 2 } },
+    { "type": "Text", "name": "RunLampText", "left": 104, "top": 176, "width": 200, "height": 28,
+      "text": "RUN", "font": { "Size": 18 }, "properties": { "ForeColor": "0xFF166534", "BackColor": "0x00FFFFFF" } },
+
+    { "type": "Rectangle", "name": "CardSpeed", "left": 364, "top": 110, "width": 300, "height": 150,
+      "properties": { "BackColor": "0xFFFFFFFF", "BorderColor": "0xFFCBD5E1", "BorderWidth": 1 } },
+    { "type": "Text", "name": "CardSpeedLabel", "left": 384, "top": 126, "width": 260, "height": 28,
+      "text": "转速 (rpm)", "font": { "Size": 16 }, "properties": { "ForeColor": "0xFF334155", "BackColor": "0x00FFFFFF" } },
+    { "type": "IOField", "name": "SpeedIO", "left": 384, "top": 168, "width": 180, "height": 44,
+      "properties": { "BackColor": "0xFFF8FAFC", "BorderColor": "0xFFCBD5E1", "BorderWidth": 1 }, "font": { "Size": 20 } },
+
+    { "type": "Button", "name": "StartBtn", "left": 720, "top": 120, "width": 260, "height": 64,
+      "text": "启动 START", "font": { "Size": 20 },
+      "properties": { "BackColor": "0xFF16A34A", "ForeColor": "0xFFFFFFFF", "BorderColor": "0xFF15803D", "BorderWidth": 1 } },
+    { "type": "Button", "name": "StopBtn", "left": 720, "top": 200, "width": 260, "height": 64,
+      "text": "停止 STOP", "font": { "Size": 20 },
+      "properties": { "BackColor": "0xFFDC2626", "ForeColor": "0xFFFFFFFF", "BorderColor": "0xFFB91C1C", "BorderWidth": 1 } }
+  ]
+}
+```
+
+(For dynamic lamp color / value display, bind via `BindUnifiedHmiTagDynamization`;
+card backgrounds use opaque `0xFF…`, text-over-card uses transparent `0x00…` so the
+card shows through.)
+
 ### `HmiButtonEventType` (probed from V21 Openness — only these are accepted)
 
 ```
@@ -749,6 +911,10 @@ that is **not** evidence that the import pipeline is wrong.
    `errors=0` (warnings allowed) and `SaveProject` returning success.
 5. **Always** quote Description tags exactly when filtering tools by layer
    (`[L0]`, `[L1]`, `[L2]`).
+6. **For ladder, author S7DCL text (`.s7dcl` + `.s7res`, both UTF-8 *with* BOM)
+   and import with `ImportBlocksFromScl`** (§9a). Do **not** hand-write FlgNet XML
+   for contacts/coils/compare/math — the only XML LAD builder
+   (`ComposePlcLadFcBlockXml`) does FC-call networks only.
 
 If a step takes longer than 90 seconds with no output, stop. The most likely
 cause is an Openness authorization dialog the user did not click. Report it,

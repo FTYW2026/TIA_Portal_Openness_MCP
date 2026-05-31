@@ -1,4 +1,4 @@
-# TIA Portal MCP Server (v0.0.33 · V20 + V21 · S7DCL)
+# TIA Portal MCP Server (v0.0.34 · V20 + V21 · S7DCL)
 
 **English** · [中文](README.md)
 

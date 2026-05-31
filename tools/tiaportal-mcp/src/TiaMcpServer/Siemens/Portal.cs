@@ -10953,25 +10953,37 @@ namespace TiaMcpServer.Siemens
             }
         }
 
-        // Openness rejects an XML whose <Engineering version="Vxx"/> is newer than the
-        // connected portal ("The engineering version 'V21' ... is not supported."). The XML
-        // builders historically hardcode V21, so on a V20 portal every import fails. Rewrite
-        // the header to the detected major version into a temp copy (user files untouched).
-        private static string NormalizeEngineeringVersion(string path)
+        // Prepare a block/type XML file for Openness import. Two things are fixed on a temp
+        // copy (the user's original file is never touched):
+        //   1) Engineering version: Openness rejects an XML whose <Engineering version="Vxx"/>
+        //      is newer than the connected portal ("The engineering version 'V21' ... is not
+        //      supported."). The XML builders historically hardcode V21, so on a V20 portal
+        //      every import fails. The header is rewritten to the detected major version.
+        //   2) Encoding/BOM: block/type XML carrying Chinese comments must be UTF-8 *with BOM*
+        //      or TIA imports the text as mojibake (中文乱码). Callers (and the model that wrote
+        //      the file) frequently emit BOM-less UTF-8, so we always re-emit with a BOM here.
+        private static string PrepareXmlForImport(string path)
         {
             try
             {
-                int major = Engineering.TiaMajorVersion;
-                if (major <= 0) return path; // version unknown -> import as-is
                 var bytes = File.ReadAllBytes(path);
                 bool hasBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
                 var text = File.ReadAllText(path, Encoding.UTF8);
-                var replaced = Regex.Replace(text,
-                    "<Engineering\\s+version=\"V\\d+\"\\s*/>",
-                    $"<Engineering version=\"V{major}\" />");
-                if (replaced == text) return path; // already matches -> no rewrite
-                var tmp = Path.Combine(Path.GetTempPath(), "tia_mcp_engver_" + Guid.NewGuid().ToString("N") + ".xml");
-                File.WriteAllText(tmp, replaced, new UTF8Encoding(hasBom));
+
+                var fixedText = text;
+                int major = Engineering.TiaMajorVersion;
+                if (major > 0)
+                {
+                    fixedText = Regex.Replace(text,
+                        "<Engineering\\s+version=\"V\\d+\"\\s*/>",
+                        $"<Engineering version=\"V{major}\" />");
+                }
+
+                // Already correct: version matches (or unknown) AND a BOM is present -> import as-is.
+                if (fixedText == text && hasBom) return path;
+
+                var tmp = Path.Combine(Path.GetTempPath(), "tia_mcp_import_" + Guid.NewGuid().ToString("N") + ".xml");
+                File.WriteAllText(tmp, fixedText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
                 return tmp;
             }
             catch
@@ -11004,7 +11016,7 @@ namespace TiaMcpServer.Siemens
 
                 if (!new FileInfo(importPath).Exists)
                     throw new PortalException(PortalErrorCode.InvalidParams, $"Import file not found: {importPath}");
-                var fileInfo = new FileInfo(NormalizeEngineeringVersion(importPath));
+                var fileInfo = new FileInfo(PrepareXmlForImport(importPath));
 
                 var imported = group.Blocks.Import(fileInfo, ImportOptions.Override);
                 if (imported == null || imported.Count == 0)
@@ -11097,7 +11109,7 @@ namespace TiaMcpServer.Siemens
                             failed.Add(new ImportFailure { Path = file, Error = "File not found" });
                             continue;
                         }
-                        var fi = new FileInfo(NormalizeEngineeringVersion(file));
+                        var fi = new FileInfo(PrepareXmlForImport(file));
 
                         if (!overwrite)
                         {
@@ -11165,7 +11177,7 @@ namespace TiaMcpServer.Siemens
 
                 if (!new FileInfo(importPath).Exists)
                     throw new PortalException(PortalErrorCode.InvalidParams, $"Import file not found: {importPath}");
-                var fileInfo = new FileInfo(NormalizeEngineeringVersion(importPath));
+                var fileInfo = new FileInfo(PrepareXmlForImport(importPath));
 
                 var imported = group.Types.Import(fileInfo, ImportOptions.Override);
                 if (imported == null || imported.Count == 0)

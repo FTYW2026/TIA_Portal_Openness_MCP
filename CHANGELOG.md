@@ -1,5 +1,14 @@
 # Change Log
 
+## [0.0.34] - 2026-05-31
+
+### 修复中文乱码 + 梯形图生成引导到 S7DCL
+
+- **中文乱码修复**：`Portal.cs` 的 `NormalizeEngineeringVersion` 改名为 `PrepareXmlForImport`，块/类型 XML 导入时在临时副本上**无条件强制 UTF-8 BOM**（不再仅"保留"原编码）+ 修正 `<Engineering version>`。此前模型/模板写出的无 BOM XML 一导入就把中文注释/块名变成乱码；现已兜底（用户原文件不改）。接入 `ImportBlock`/`ImportType`/批量导入三处。
+- **梯形图（LAD）生成引导**：SKILL §9 重写为「优先 S7DCL 文本、FlgNet XML 降为 fallback」。根因——能生成 LAD 的工具（`BuildFlgNetCallXml`/`ComposePlcLadFcBlockXml`）只支持"FC 调用网络"，普通触点/线圈梯形图无 XML 工具，手写 FlgNet 易报错。新增可从零编写的 `.s7dcl` LAD 语法 + 真机样例（`skill/lad-cookbook/MCPVerify_FC_LAD.s7dcl/.s7res` 等），用 `ImportBlocksFromScl` 导入；两个 LAD-XML 工具描述加 NARROW SCOPE 提示；§15 加硬规则 6。
+- **示例项目质量**：SKILL §7 加「构建完整示例项目」清单 + 标准 HMI 变量连接/驱动规范；§12 加完整 1024×768 仪表盘 `designJson` 范本（仅用已验证 schema 键）。
+- 重建 V20/V21 exe（0.0.34，0 错误）。
+
 ## [0.0.33] - 2026-05-28
 
 ### 去除内部"商业"措辞（发布质检工具）
