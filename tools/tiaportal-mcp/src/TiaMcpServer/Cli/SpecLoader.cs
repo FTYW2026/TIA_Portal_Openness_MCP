@@ -20,6 +20,7 @@ namespace TiaMcpServer.Cli
                 throw new FileNotFoundException($"spec file not found: {path}");
 
             var text = File.ReadAllText(path); // ReadAllText strips a UTF-8 BOM if present
+            text = ResolveBundleToken(text);
             var ext = Path.GetExtension(path).ToLowerInvariant();
 
             if (ext == ".json")
@@ -33,6 +34,32 @@ namespace TiaMcpServer.Cli
             if (trimmed.StartsWith("{") || trimmed.StartsWith("["))
                 return text;
             return YamlToJson(text);
+        }
+
+        // The shipped spec templates reference bundled .scl/.s7dcl files via a "__BUNDLE__" token
+        // so they work without the user hand-editing absolute paths. Resolve it to the package
+        // root (found by walking up from the exe to a dir that has both templates/ and tools/).
+        // Forward slashes are used so the result stays valid inside JSON string values (no \-escaping
+        // needed) and Windows file APIs accept them. If the root can't be found, the token is left
+        // as-is and the user must substitute it manually.
+        private static string ResolveBundleToken(string text)
+        {
+            if (!text.Contains("__BUNDLE__")) return text;
+            var root = FindBundleRoot();
+            if (root == null) return text;
+            return text.Replace("__BUNDLE__\\\\", root + "/")  // JSON "__BUNDLE__\\templates" -> root + "/templates"
+                       .Replace("__BUNDLE__/", root + "/")      // YAML / forward-slash form
+                       .Replace("__BUNDLE__", root);
+        }
+
+        private static string? FindBundleRoot()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            for (int i = 0; i < 12 && dir != null; i++, dir = dir.Parent)
+                if (Directory.Exists(Path.Combine(dir.FullName, "templates")) &&
+                    Directory.Exists(Path.Combine(dir.FullName, "tools")))
+                    return dir.FullName.Replace('\\', '/');
+            return null;
         }
 
         public static string YamlToJson(string yaml)

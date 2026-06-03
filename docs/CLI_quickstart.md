@@ -3,8 +3,20 @@
 v2.0 起，交付包里的 **同一个 exe** 既是 MCP 服务，也是命令行 `tia`。
 不需要装 MCP 客户端、不需要会编程：**任意 AI 写一份 spec，你跑一条命令。**
 
-可执行文件：`tools/tiaportal-mcp/src/TiaMcpServer/bin/Release/net48/TiaMcpServer.exe`
-（下文用 `tia` 指代它。）
+## 让 `tia` 命令可用（一次性）
+
+交付包根目录放了现成入口：
+
+- **`tia.cmd`**（V21）/ **`tia-v20.cmd`**（V20）—— 按你装的 TIA 大版本选一个。
+
+两种用法：
+
+1. **直接用全名**：在交付包根目录下 `tia gen spec.yaml`（V20 用户 `tia-v20 gen spec.yaml`）。
+2. **加进 PATH 后随处可用**（推荐）：把交付包根目录加入系统环境变量 `PATH`，之后任意目录都能 `tia gen ...`。
+
+> 下文一律写 `tia`；V20 用户把它换成 `tia-v20`。两个 `.cmd` 只是把参数透传给深层的
+> `…\bin\Release\net48\TiaMcpServer.exe`（V21）/ `…\bin-v20\…`（V20），退出码原样返回。
+> 不想配也行——直接调那个 exe 全路径效果完全一样。
 
 ---
 
@@ -52,6 +64,9 @@ compile: true
 save: true
 ```
 完整字段见 `tia schema`，现成模板见 `templates/project-blueprints/`（启停、电机，均编译 0 错）。
+这两个模板**开箱即用**——里面引用 `.scl`/`.s7dcl` 的路径写成 `__BUNDLE__\...`，
+`tia` 会自动把 `__BUNDLE__` 解析成交付包根目录，你直接 `tia gen scaffold_spec_motor.json` 即可，
+无需手动替换路径。（拷到别处用同样有效，只要 `tia` 还在交付包里。）
 
 提示：
 - `tia gen` 从零建；`tia patch` 改已有工程（spec 里加 `projectPath: D:\...\X.ap21`）。
@@ -67,3 +82,7 @@ save: true
 - **中文乱码？** 输出已强制 UTF-8；`.scl` 文件请存 UTF-8 BOM。
 - **V20 还是 V21？** 用与你 TIA 大版本匹配的那个 exe（`bin\Release`=V21，`bin-v20\Release`=V20）。可加 `--tia-major-version 20|21` 或 `--tia-portal-location <安装根>` 覆盖。
 - **要看 GUI？** 加 `--with-ui` 用完整界面启动（较慢）。
+- **工程路径可以写相对的吗？** 可以——`tia describe/compile/export/import` 和 `tia patch` 的工程路径
+  现在按你当前所在目录解析（v2.0 修复，之前只认 exe 目录会报 `Projects.Open failed`）。
+- **`tia prewarm` 怎么停？** 在它运行的那个窗口按 `Ctrl+C` 即可优雅关闭。若是后台/双击启动的，
+  `tia prewarm --stop` 只会关掉那个 headless TIA 实例，预热**进程本身**需手动结束（任务管理器里的 `TiaMcpServer.exe`）。

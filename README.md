@@ -18,7 +18,9 @@
 - **`tia gen <spec.yaml|json>`**：一条命令从 spec 建完整工程（= `ScaffoldProject`）。`--dry-run` 离线校验、`--json` 机器可读。
 - **`tia patch <spec>`**：把 spec **增量 upsert 进已有工程**（spec 内 `projectPath` 指向 `.apXX`），未提及的元素不动；`--no-overwrite` 保护手改的 LAD 代码块。
 - 还有 `tia compile / describe / export / import / prewarm / schema / version`。退出码 **0=成功 / 1=有失败步骤 / 2=错误**。
-- **零编程上手**：把 spec 拖到 `scripts\生成工程.bat` 上即可；`scripts\预热.bat` 常驻 headless 实例让后续命令 ~1s 连上。
+- **`tia` 命令入口**：交付包根目录的 `tia.cmd`（V21）/ `tia-v20.cmd`（V20）——把根目录加进 PATH 即可随处 `tia gen ...`，不必记忆深层 exe 路径。
+- **零编程上手**：把 spec 拖到 `scripts\生成工程.bat` 上即可（V21 缺失自动回退 V20）；`scripts\预热.bat` 常驻 headless 实例让后续命令 ~1s 连上。
+- **现成模板开箱即用**：`templates/project-blueprints/` 的启停/电机 spec 直接 `tia gen` 即可，`tia` 自动解析其中 `__BUNDLE__` 为交付包根目录，无需手改路径。
 - **让任意 AI 生成 spec**：见 [`docs/AI_spec_prompt.md`](docs/AI_spec_prompt.md) —— 通用契约「产出一份 spec」，不要求 AI 支持 MCP。
 - **YAML + JSON 双解析**：JSON 首选（零歧义），YAML 便于人读写；同一 spec 两者产出一致。
 

@@ -18,7 +18,15 @@
 ### 形态
 
 - 仍是双 V20/V21 binary，仍为 MCP 服务（`tia` verb 之外的行为完全不变）；CLI 与 MCP 共享同一引擎，改一处两端受益。
-- 离线验证通过：`gen`/`patch` 的 `--dry-run`、YAML/JSON 等价、退出码、`schema`/`version`/`help`。**live 实机回归（真连 TIA 建工程/patch/compile/export/import/prewarm）待执行。**
+- 离线验证通过：`gen`/`patch` 的 `--dry-run`、YAML/JSON 等价、退出码、`schema`/`version`/`help`。
+
+### 2026-06-03 修订 — 实机验证 + 零基础上手优化
+
+- **live 实机回归全过**（真连 TIA V21，headless）：`tia gen` 16/16 步、编译 Success 0 错；`tia prewarm` 后续命令 ~2s attach；`describe`/`compile`/`export`/`import`/`patch`(upsert 后再编译 Success) 全部 rc=0。
+- **修复相对工程路径**：`tia describe/compile/export/import` 与 `tia patch` 的工程路径此前按 exe 目录解析（传相对路径会 `Projects.Open failed`），现按当前工作目录解析（`Path.GetFullPath`）。
+- **新增 `tia` 命令入口**：交付包根目录加 `tia.cmd`（V21）/ `tia-v20.cmd`（V20），把根目录加进 PATH 即可随处 `tia gen ...`，无需记忆深层 exe 路径。
+- **spec 模板开箱即用**：`tia` 自动把 spec 里的 `__BUNDLE__` 解析成交付包根目录（向上探测含 `templates/`+`tools/` 的目录），现成模板无需手动替换路径即可直接 `tia gen`。
+- **`.bat` 双版本回退**：`生成工程.bat`/`预热.bat` 在 V21 exe 缺失时自动回退到 V20 exe，V20 用户也能拖拽即用。
 
 ## [1.0.0] - 2026-06-02
 
