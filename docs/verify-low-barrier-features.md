@@ -16,7 +16,7 @@ Status date: 2026-06-16.
 
 - Pure matcher `Guard.MatchPlcName` — 16 deterministic offline cases pass
   (sole-PLC / case / trim / unique-substring / ambiguous→none / not-found→none).
-  See `_verify_matchname.ps1` (reflection over the built assembly).
+  Run `scripts/Test-MatchPlcName.ps1` (reflection over the built assembly).
 - Live spot-check is best done in **your wired MCP** — a cold-spawned test process
   stalls on the Openness attach/trust handshake, so it is unreliable for this:
   ```
