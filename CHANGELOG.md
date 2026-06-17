@@ -10,6 +10,7 @@
 - **下载 V21 cast bug 修复 + 真机验证**：`DownloadToPlc` 旧版在 V21 报"ConnectionConfiguration 无法转换为 IConfiguration"。修复：导航到 `ConfigurationTargetInterface`（它才是 IConfiguration）并应用路由；修正 StopModules 选择枚举为 `StopAll`（旧值"StopModule"不存在→每次下载"unhandled"中止）；反射异常解包显示真实原因。**真机验证（江夏 安全PLC / S7-1200）：state=Success，0 错**。
 - **文档诚实化**：本轮先发现上一轮未提交文档把"下载已修复"等写在了代码之前，已逐处核对——softwarePath 容错按代码兑现、下载按真机验证转正，措辞与代码/真机一致。
 - 工具数 189 → 190（仅新增 `ExportDeviceAml`）。
+- **文档与既定方向对齐（竞品对标后）**：路线图（`docs/server-maturity-roadmap.md`）与 SKILL §18 中“安全F块 / PLCSIM / 原生Git-VCI”由“P1 待补缺口”改标为**主动放弃（低收益＋高风险）**，避免文档诱导去做已否决的功能；OPC UA 明确保持只读。统一工具数表述为 ~190(full) / ~38(lite)，订正 SKILL.md 中 184 / 196 / 180 等不一致旧值（精确以 `tools/list` 为准）。纯文档，无代码改动。
 
 ## [2.2.4] - 2026-06-15 - 一键配置：把 MCP 注册进 AI 宿主，零手改 JSON
 

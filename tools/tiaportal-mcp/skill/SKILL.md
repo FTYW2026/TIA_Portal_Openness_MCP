@@ -7,7 +7,7 @@ description: Drive Siemens TIA Portal (博途) end-to-end through the TiaMcpServ
 
 This is the operating skill for TIA Portal MCP automation. The
 companion plugin lives at `tools/tiaportal-mcp/`. It exposes on the order of
-**184** MCP tools in this bundle snapshot (exact runtime set: call `tools/list` on the running server) covering
+**~190** MCP tools (lite profile ~38; exact runtime set: call `tools/list` on the running server) covering
 project, hardware, PLC, HMI, and online operations.
 
 ## 0. Always start here
@@ -26,9 +26,9 @@ Never guess paths. Never invent SCL/LAD XML. If a tool exists for the task, use
 it; otherwise inspect with `DescribeObject`/`DescribeService` first, then call
 `InvokeObject`/`InvokeService`.
 
-## 0.1 弱模型 / 新手：你一辈子只需要这 15 个工具（其余 180 个先忽略）
+## 0.1 弱模型 / 新手：你一辈子只需要这 15 个工具（其余的先忽略）
 
-This server exposes ~196 tools. **You do NOT need most of them.** A small or
+This server exposes ~190 tools. **You do NOT need most of them.** A small or
 non-expert model should pick **only** from this whitelist and ignore everything
 else unless one of these tools' output explicitly tells you to call another:
 
@@ -51,7 +51,7 @@ else unless one of these tools' output explicitly tells you to call another:
 
 **降门槛三件套(已内置，弱模型友好):**
 - **Lite 工具档位** — 启动 server 时设环境变量 `TIA_MCP_PROFILE=lite`，`tools/list`
-  只暴露 ~38 个 L0/L1 核心工具(而非全部 ~196)，弱模型不会在工具海里选错。默认仍是
+  只暴露 ~38 个 L0/L1 核心工具(而非全部 ~190)，弱模型不会在工具海里选错。默认仍是
   full；要全量工具就别设这个变量。(已实测：full=190 工具含 L2，lite=38 工具无 L2。)
 - **参数容错** — `softwarePath` 现在容忍多余空格/大小写，单 PLC 工程或唯一匹配时
   传"PLC"也能自动认到 `PLC_1`；找不到时报错会**列出可用 PLC 路径**。少数易错工具
@@ -1104,16 +1104,18 @@ Honest scope so you don't over-promise. Quote this when a user asks "can it do X
 | Unified HMI design JSON + bindings | ✅ (§12) | ✅ | ✅ (JSON screens) |
 | OPC UA read (live values, monitoring) | ✅ read-only (`ReadPlcLiveValuesOpcUa`) | ✅ | ✅ browser+subscribe+trend |
 | Download to CPU | ✅ fixed, verified on real CPU (§13) | ✅ | ✅ |
-| **Safety F-block author / compile / signature** | ❌ **gap** (§4; roadmap) | ✅ full | ✅ full |
-| **PLCSIM simulation / unit testing** | ❌ **gap** (roadmap) | ✅ simulate | ✅ PLCSIM Advanced tests |
-| Native Git / VCI | ❌ (text-export workaround §16) | ✅ Git+CI | ✅ full Git UI |
+| **Safety F-block author / compile / signature** | ✕ **不做(主动放弃)** | ✅ full | ✅ full |
+| **PLCSIM simulation / unit testing** | ✕ **不做(主动放弃)** | ✅ simulate | ✅ PLCSIM Advanced tests |
+| Native Git / VCI | ✕ 不做(用文本导出替代 §16) | ✅ Git+CI | ✅ full Git UI |
 | Block protection / encrypted vault | ❌ | partial | ✅ AES vault |
 | UMAC user/rights, SiVArc auto-screens | ❌ | ✅ | partial |
 
 **Where we win:** one-call `ScaffoldProject`, verified S7DCL LAD + mixed LAD/SCL,
 honest verified-vs-not discipline, and being a real MCP (not a paid license).
-**Known gaps → see the roadmap** `docs/server-maturity-roadmap.md` (bundle root):
-safety F-blocks and PLCSIM are the two that matter most for parity.
+**The ✕ rows are deliberate, not a backlog:** safety F-blocks / PLCSIM / native Git-VCI
+are **intentionally out of scope** — low real benefit for this tool's job (engineering
+automation) and risky on a live machine. Do **not** pitch them as "coming". Rationale in
+`docs/server-maturity-roadmap.md` (bundle root).
 
 ## 19. Hard rules
 

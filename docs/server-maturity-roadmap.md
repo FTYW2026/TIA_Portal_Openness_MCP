@@ -1,94 +1,72 @@
-# Server Maturity Roadmap — closing the gap vs T-IA Connect / Openness Manager
+# Server roadmap — aligned with the low-barrier direction
 
-Status date: 2026-06-16. This is the C#/server work the **skill cannot deliver**
-(those are capabilities, not documentation). Prioritized by *value × feasibility*.
-Each item: what, why it matters, Openness feasibility, rough effort, first step.
+Status date: 2026-06-17. **This is NOT a "catch up to T-IA Connect / Openness Manager"
+roadmap.** Project direction (confirmed 2026-06-17; memory
+`feedback-mcp-lower-barrier-not-features`): optimize for **降门槛 / 好用 / 正确率**, not
+feature-parity with the commercial suites. Several headline competitor features are
+**deliberately declined** below — low real benefit for this tool's job (engineering
+automation) and genuinely risky on a live machine (江夏 安全PLC is in scope).
 
-Competitor reference points: **T-IA Connect** (REST+MCP, full F-safe, VCI/Git, UMAC,
-SiVArc) and **TIA Openness Manager** (PLCSIM unit tests, fingerprint diff, OPC UA
-browser, encrypted vault, Git UI). See SKILL.md §18 for the full matrix.
+Competitor reference (context only, **not** targets): **T-IA Connect** (REST+MCP, F-safe,
+VCI/Git, UMAC, SiVArc) and **TIA Openness Manager** (PLCSIM unit tests, fingerprint diff,
+OPC UA browser, encrypted vault, Git UI). Capability boundary table: SKILL.md §18.
 
 ---
 
-## P0 — Finish what's started
+## Done
 
-### 0. Fix the V21 download cast bug — DONE (2026-06-17)
+### V21 download cast bug — DONE (2026-06-17)
 - **What:** `DownloadToPlc` failed on V21 with the `ConnectionConfiguration` → `IConfiguration`
-  cast (SKILL.md §13). **Fixed:** navigate to a `ConfigurationTargetInterface` (the actual
-  `IConfiguration`) via `Modes → PcInterfaces → TargetInterfaces` and pass it to `Download()`;
-  also fixed the `StopModules` selection (`StopAll`, not the non-existent "StopModule").
-- **Verified:** end-to-end on a real S7-1200 (江夏 安全PLC) → `state=Success, 0 errors`.
-- **Follow-up (optional):** the route auto-selects the FIRST PG/PC interface — add a
-  `targetInterfaceName` parameter if multi-NIC selection becomes a problem.
+  cast. **Fixed:** navigate to a `ConfigurationTargetInterface` (the real `IConfiguration`)
+  via `Modes → PcInterfaces → TargetInterfaces`; also fixed the `StopModules` selection
+  (`StopAll`, not the non-existent "StopModule").
+- **Verified** end-to-end on a real S7-1200 (江夏 安全PLC) → `state=Success, 0 errors`.
+- **Follow-up (only if it ever bites):** the route auto-selects the FIRST PG/PC interface —
+  add a `targetInterfaceName` param only if multi-NIC selection becomes a real problem.
 
 ---
 
-## P1 — Highest parity value
+## Explicitly NOT planned — declined by direction (低收益 + 高风险)
 
-### 1. Safety (F-block) support
-- **What:** list / read / export / import F-blocks; read **F-signature**; safety
-  **login/logoff** (safety password); optionally trigger F-program compile.
-- **Why:** both competitors lead with this; SKILL.md §4 currently says "must be done
-  in TIA UI manually". Biggest single credibility gap for safety projects (江夏 安全PLC
-  is already in scope).
-- **Feasibility:** **Good** for read/export/import/signature — Openness `Siemens.
-  Engineering.Safety` is already imported in `Portal.cs`; T-IA Connect proves the
-  surface exists V16–V21. **Login/logoff** feasible (safety password handler).
-  **Authoring brand-new F-FCs** with safety instructions is the hard tail — defer.
-- **Effort:** M (read/signature/export) → L (login + compile).
-- **First step:** add `[L2] GetSafetyProgramInfo` (signature, F-collective sig,
-  safety mode) read-only tool over `SafetyAdministration` / failsafe data; ship it
-  draft-Release and verify on 安全PLC before adding write paths.
+Decided 2026-06-17. Do **not** start these; do **not** market them as "coming". If a
+concrete user ever demands one, re-open the discussion first — don't just build it.
 
-### 2. PLCSIM Advanced simulation + unit testing
-- **What:** start a virtual S7-1500, download to it, drive inputs, assert outputs;
-  AI-generated test suites are the Openness-Manager headline.
-- **Why:** lets the whole "author → compile → **prove it works**" loop run without
-  hardware — turns the MCP from a generator into a verifier.
-- **Feasibility:** **Separate dependency.** Not Openness — needs the **PLCSIM
-  Advanced API** (`Siemens.Simatic.Simulation.Runtime`, separate install/license).
-  Clean to add as an optional module that no-ops when PLCSIM Advanced is absent.
-- **Effort:** L (new runtime integration + test harness format).
-- **First step:** spike `Siemens.Simatic.Simulation.Runtime` instance create/start
-  behind a `[L2] PlcSimStart/Stop/SetIO/ReadIO` set; gate on availability like the
-  OPC UA reader does.
+- **Safety F-block author / compile / signature.** Both commercial tools lead with this; we
+  don't. Authoring/altering F-logic by AI on a live safety CPU is the highest-risk,
+  lowest-upside thing this tool could do, and F-CPU compile has no Openness API anyway
+  (SKILL.md §4). Reading *non-safety* blocks on a safety PLC already works (§10/§11, verified
+  on 安全PLC) — that is sufficient.
+- **PLCSIM (Advanced) simulation / unit testing.** Needs a separate license + runtime
+  (`Siemens.Simatic.Simulation.Runtime`) and a large integration, while *raising* the barrier
+  (a heavy dependency most users won't have). Contradicts the 降门槛 goal.
+- **Native Git / VCI.** The text-export workaround (§16, `ExportBlocksAsDocuments`) already
+  covers the 80% (diff / review / history) at zero added surface. A native VCI clone is a
+  product-suite feature, not engineering automation.
+- **UMAC user/rights, SiVArc auto-screens, full Git UI, encrypted credential vault.**
+  Product-suite scope; out of scope for an MCP whose job is engineering automation.
+- **OPC UA *write* / method-call / subscribe.** OPC UA stays **read-only**
+  (`ReadPlcLiveValuesOpcUa`) on purpose — supervised writes to a running crane are not worth
+  the failure modes. (Declined under "你决定" 2026-06-17; not in the original reject list, so
+  re-open if a real commissioning need appears, behind an explicit safety gate.)
 
 ---
 
-## P2 — Rounding out
+## Still open — only if cheap AND aligned (no pressure to do any)
 
-### 3. OPC UA write + method calls + subscriptions
-- **What:** today only **read** (`ReadPlcLiveValuesOpcUa`). Add write, method
-  invoke, and an address-space browse/subscribe (Openness Manager's "AI Canvas").
-- **Why:** read-only is half a client; commissioning needs supervised writes.
-- **Feasibility:** Good — `Workstation.UaClient` is already a dependency.
-- **Effort:** M. Guard writes behind an explicit safety gate (these touch a live CPU).
+These don't contradict the direction and add little surface. Pick up only on real need:
 
-### 4. Native diff / Git helper (over §16 text export)
-- **What:** wrap `ExportBlocksAsDocuments` into a one-call "snapshot to git dir +
-  diff vs last snapshot"; optional fingerprint compare like the competitors.
-- **Why:** code review / change history without the licensed VCI feature.
-- **Feasibility:** Good — pure orchestration of existing export tools + git CLI.
-- **Effort:** S–M. Lowest risk; mostly glue. The text-export workaround (§16)
-  already covers the 80% case, so this is convenience, not a blocker.
-
-### 5. Block protection / know-how protect
-- **What:** `Protect` / `Unprotect` over `PlcBlockProtectionProvider` (the reference
-  `TiaHelper.cs` already shows the call shape).
-- **Why:** IP protection on delivered blocks; Openness Manager has an encrypted vault.
-- **Feasibility:** Good (proven call shape in-repo). **Effort:** S.
+- **Block know-how protection** (`Protect`/`Unprotect` over `PlcBlockProtectionProvider`;
+  call shape proven in `TiaHelper.cs`). Small, and genuinely useful for IP on delivered
+  交付包 blocks. Effort: S.
+- **Git snapshot helper** over the §16 text export (one call: export to a git dir + `git diff`
+  vs last snapshot). Pure glue over existing tools + git CLI; **not** a VCI clone. Effort: S–M.
 
 ---
 
-## Explicitly NOT planned (low value / high cost here)
-- UMAC user/rights management, SiVArc rule-based screen generation, full Git UI,
-  encrypted credential vault. These are product-suite features; out of scope for an
-  MCP whose job is engineering automation. Revisit only on concrete user demand.
+## The real frontier is packaging, not server features
 
----
-
-## Sequencing suggestion
-P0.0 (verify download) → P1.1 read-only safety (draft Release, verify on 安全PLC) →
-P2.5 block protection (cheap win) → P2.3 OPC UA write → P1.2 PLCSIM (largest) →
-P2.4 git helper. Follow the repo rule: **draft Release first, promote only after
-real-machine verification.**
+The only axis where the simplest competitor (`AI助手`: one `.exe`, a DeepSeek key, "获取项目",
+chat, import) beats this MCP is **onboarding / 门槛** — and that is answered by
+**TiaHelperGui** (the thin WinForms front-end for people who can't wire up MCP), not by adding
+tools to the server. Eigent is **not** a competitor: it's a generic MCP host (a local Claude
+Cowork alternative) that could *mount* this server. Distribution, not features.
