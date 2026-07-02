@@ -1,5 +1,14 @@
 # Change Log
 
+## [2.2.6] - 2026-07-02 - 三大 god-file 拆分为领域 partial + CLI describe 增强
+
+维护性重构 + CLI 易用性，工具集与行为不变（重构后 exe 已日常真机使用验证）：
+
+- **god-file 拆分**：`McpServer.cs`(-7000行) / `Program.cs`(-7784行) / `Portal.cs`(-13221行) 按领域拆成 18 个 partial 文件（Blocks/Devices/Documents/Groups/PlcSoftware/ProjectSession/Types、CliProbes/HmiTemplates/PlcHmiSyncXml/ReportBuilders、Alarms/Download/Helpers/OpcUa/Software 等），并发协作不再撞车，行为零变化。
+- **CLI `tia describe` 增强**：输出真实项目树 + 块清单（类型/名称/语言），此前只打印状态串。
+- **Claude Code 插件清单**：新增 `.claude-plugin/` + `.mcp.json` + `runtime/v21` 捆绑运行时，支持 `/plugin marketplace add` 一键安装。
+- 版本对齐：V20/V21 双 exe、manifest、README 统一 2.2.6。
+
 ## [2.2.5] - 2026-06-16 - 读组态IP + 块路径修复 + softwarePath 容错 + 文档诚实化
 
 继续降门槛 / 提正确率 / 成熟化，改动均经真机或离线验证：
