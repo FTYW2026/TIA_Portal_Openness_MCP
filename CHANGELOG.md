@@ -1,5 +1,19 @@
 # Change Log
 
+## [2.2.7] - 2026-07-02 - 门槛归零：版本自路由 + 四宿主一键配置 + 模型引导（instructions/GetAuthoringGuide）
+
+本轮全部围绕两个真实用户痛点：①配置要人肉填 MCP 路径/博途路径/版本（issue #9）②非 Claude 的 AI 调用时生成代码质量差、耗时长。
+
+- **版本自路由（修 issue #8 根因）**：exe 启动时若实际 TIA 版本 ≠ 本 exe 编译目标（V20↔V21），自动找到旁边的兄弟 exe（`bin`↔`bin-v20`、`runtime/v20`↔`v21` 两种布局都认）并以相同参数重新执行，stdio 继承——MCP 宿主和 CLI 都无感。V20 机器拿到 V21 exe 不再报「未能加载 Siemens.Engineering.Base 21.0」，而是照常工作。防死循环 env 守卫；找不到兄弟 exe 时给出明确指引。
+- **修复多版本机器上的程序集解析劫持**：`TiaPortalLocation` 环境变量是版本无关的（常指向 V21 安装），旧逻辑让它优先于版本相关注册表，导致 V20 exe 在 V20+V21 双装机器上报「Could not find DLL 'Siemens.Engineering' for version 20」。现在：环境变量路径版本匹配才采用 → 版本专属注册表 → 最后才兜底环境变量。本机双装环境实测修复。
+- **`tia config` 一键配置扩到 4 宿主（修 issue #9）**：Claude Desktop / **Claude Code**（`~/.claude.json`）/ Cursor / **VS Code**（`%APPDATA%\Code\User\mcp.json`，`servers`+`type:stdio` 专属 schema）。自动发现自身路径 + 注册表版本 + **版本匹配的 exe**；默认只写本机检测到的宿主（不给没装的 IDE 凭空造配置）；`--host claude|claude-code|cursor|vscode` 指定单个；`--print` 同时输出两种 schema 片段；JSON 不再把中文路径转成 `\uXXXX` 转义。原配置 `.bak` 备份、其它 server 保留（沿用已真机验证的合并逻辑）。
+- **模型引导（针对“其它 AI 生成质量差”）**：
+  - **MCP initialize 下发 `instructions`**：黄金路径（整工程→ScaffoldProject+dryRun；改块→s7dcl/SCL 文本导入；禁止手写 FlgNet XML）、BOM 编码规则、编译/保存纪律、错误恢复纪律——所有 MCP 客户端（含从不读 SKILL.md 的 VS Code/Cursor/三方 agent）自动注入模型上下文。
+  - **新工具 `GetAuthoringGuide(topic)`**［L0］：workflow / scl / lad / db / hmi / errors 六个主题的已验证语法速查（SCL 骨架与十诫、s7dcl LAD 文本要素、BOM 规则表、常见报错→精确修法），模型写代码前一次调用拿到全部约束。
+  - **Bootstrap OperatingRules 补 2 条**：写代码前先调 GetAuthoringGuide；BOM 编码规则。
+- README 中英：「挂载 MCP」改为一条 `config` 命令的全自动流程。
+- 离线验证：V20/V21 双编译 0 错；V20 exe 真机自路由到 V21 exe 实测通过；`config --print` 双 schema 实测正确；MCP 握手实测 instructions 下发 + 199 工具含 GetAuthoringGuide + 主题内容正确。
+
 ## [2.2.6] - 2026-07-02 - 三大 god-file 拆分为领域 partial + CLI describe 增强
 
 维护性重构 + CLI 易用性，工具集与行为不变（重构后 exe 已日常真机使用验证）：

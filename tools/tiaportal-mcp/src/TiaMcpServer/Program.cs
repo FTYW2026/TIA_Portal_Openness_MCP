@@ -69,20 +69,39 @@ namespace TiaMcpServer
                 }
 
                 int tiaMajorVersion;
+                bool tiaVersionReliable; // explicit CLI arg or a positive registry detection (not the blind fallback)
                 if (options.TiaMajorVersion.HasValue)
                 {
                     tiaMajorVersion = options.TiaMajorVersion.Value;
+                    tiaVersionReliable = true;
                     LogDiag($"TIA major version (from CLI): {tiaMajorVersion}");
                 }
                 else
                 {
                     var detected = Engineering.DetectTiaMajorVersion();
                     tiaMajorVersion = detected ?? 21;
+                    tiaVersionReliable = detected.HasValue;
                     LogDiag(detected.HasValue
                         ? $"TIA major version (auto-detected): {tiaMajorVersion}"
                         : $"TIA major version (default fallback): {tiaMajorVersion} — install not detected, specify --tia-major-version if wrong");
                 }
                 Engineering.TiaMajorVersion = tiaMajorVersion;
+
+                // Version-aware self-routing (issue #8): this exe's IL is bound to one TIA major
+                // version; when the machine actually wants a different one, re-exec the sibling
+                // exe built for it instead of crashing at the first Siemens assembly load.
+                // stdio is inherited, so MCP hosts and CLI callers are unaffected.
+                if (tiaVersionReliable && tiaMajorVersion != EngineRouter.CompiledTiaMajorVersion)
+                {
+                    if (EngineRouter.TryRedirect(tiaMajorVersion, args, LogDiag, out int routedExit))
+                    {
+                        Environment.Exit(routedExit);
+                        return;
+                    }
+                    LogDiag($"WARN: TIA V{tiaMajorVersion} requested but this exe is built for V{EngineRouter.CompiledTiaMajorVersion} " +
+                            $"and no V{tiaMajorVersion} sibling exe was found next to it — Siemens assembly load will likely fail. " +
+                            $"Run the V{tiaMajorVersion} exe from the bundle, or pass --tia-major-version {EngineRouter.CompiledTiaMajorVersion} to force.");
+                }
 
                 // 静态自检也会枚举 MCP 工具特性，方法签名里引用的 Siemens 程序集需要先能被解析。
                 // 这里只注册程序集解析器，不初始化 Openness，也不连接或打开 TIA 项目。
@@ -569,7 +588,12 @@ namespace TiaMcpServer
                 try
                 {
                     builder.Services
-                        .AddMcpServer()
+                        .AddMcpServer(o =>
+                        {
+                            // Injected into the model's context by the host at initialize time —
+                            // reaches EVERY MCP client, including ones that never load SKILL.md.
+                            o.ServerInstructions = ModelContextProtocol.McpGuides.ServerInstructions;
+                        })
                         .WithStdioServerTransport()
                         .WithToolsFromAssembly()
                         .WithPromptsFromAssembly();
