@@ -1,10 +1,10 @@
 ﻿{
   "schemaVersion": "2026-05-25",
-  "bundleVersion": "2.2.8",
-  "packageName": "TIA_MCP_Delivery_v2.2.8_20260703",
+  "bundleVersion": "2.3.0",
+  "packageName": "TIA_MCP_Delivery_v2.3.0_20260704",
   "packageType": "tia-portal-mcp-complete-offline-delivery-bundle",
   "generatedAt": "2026-05-31T20:30:00+08:00",
-  "refreshedAt": "2026-07-03T19:00:00+08:00",
+  "refreshedAt": "2026-07-04T12:30:00+08:00",
   "target": {
     "tiaPortalMajorVersion": [
       20,
@@ -84,15 +84,15 @@
     }
   },
   "capabilities": {
-    "mcpToolCount": 200,
+    "mcpToolCount": 201,
     "mcpToolLayers": {
       "L0": 8,
-      "L1": 34,
+      "L1": 35,
       "L2": 158
     },
     "newToolsThisRelease": [
-      "Doctor (v2.2.8)",
-      "GetAuthoringGuide (v2.2.7)"
+      "DescribeBlockLogic (v2.3.0)",
+      "Doctor (v2.2.8)"
     ],
     "removedToolsThisRelease": [],
     "hmiTemplateJsonCount": 8,
