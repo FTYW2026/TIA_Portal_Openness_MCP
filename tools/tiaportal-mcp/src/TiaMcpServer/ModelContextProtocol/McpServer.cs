@@ -281,6 +281,8 @@ namespace TiaMcpServer.ModelContextProtocol
                     "Openness API CANNOT: read/change CPU RUN-STOP mode (use OPC UA), read fault buffer, ClearForces, selective per-block download.",
                     "Force/Watch table values become effective only after the project is online and the table trigger fires.",
                     "Safety F-CPU compile is not exposed in PublicAPI; user must trigger it in TIA UI.",
+                    "HMI full automation (connection + tags + screens) works ONLY for WinCC Unified panels. Classic/Comfort/Basic panels (KTP Basic, TP/KTP Comfort) CANNOT get their PLC-HMI connection, tag binding or screens created via Openness on this build (CommunicationConnections service is not exposed) — pick a WinCC Unified panel (e.g. MTP700 Unified Basic 6AV2 123-3GB32-0AW0) if you need end-to-end HMI automation.",
+                    "HMI screen text labels use itemType 'Text' (HmiText). A Rectangle has NO Text property — writing text onto a Rectangle silently yields a blank label. Use Rectangle only for lamps/indicators/backgrounds.",
                 };
 
                 bool ready = env.OpennessGroupOk == true && (env.TiaVersionInUse != null || env.TiaVersionDetected != null);

@@ -28,7 +28,7 @@ GOLDEN PATHS (pick one, do not improvise):
 BEFORE WRITING CODE call GetAuthoringGuide with topic 'scl' or 'lad' — it returns the exact verified syntax and encoding rules. Most quality problems come from skipping this.
 
 ENCODING (breaks Chinese text if wrong):
-- .scl external source files: UTF-8 WITHOUT BOM.
+- .scl external source: UTF-8 WITHOUT BOM *only if ASCII-only*. If the .scl has Chinese (identifiers/comments), no-BOM is read as GBK -> mojibake + bogus 'syntax error / BEGIN invalid'. Fix: add a BOM (utf-8-sig) OR keep all comments ASCII. Safest with Chinese: author the block as .s7dcl or XML instead (both WITH BOM, Chinese-safe).
 - .s7dcl / .s7res and ALL block/UDT/tag-table XML: UTF-8 WITH BOM.
 
 DISCIPLINE:
@@ -51,8 +51,9 @@ Connect → (OpenProject | AttachToOpenProject | CreateProject) → GetProjectTr
 
             ["scl"] =
 @"SCL AUTHORING (verified):
-Preferred import: ImportFromDocuments / ImportBlocksFromScl with .s7dcl files (UTF-8 WITH BOM). Alternative: GenerateBlocksFromExternalSource with .scl external source (UTF-8 WITHOUT BOM — a BOM makes it fail at line 0).
-Skeleton (block names in English; Chinese OK in comments/titles):
+Preferred import: ImportFromDocuments / ImportBlocksFromScl with .s7dcl files (UTF-8 WITH BOM). Alternative: GenerateBlocksFromExternalSource with .scl external source (UTF-8 WITHOUT BOM for ASCII-only; if the .scl has Chinese, no-BOM mojibakes it -> add a BOM or keep comments ASCII, or better author it as .s7dcl).
+CAUTION: GenerateBlocksFromExternalSource does NOT overwrite an existing block — re-running updates modifiedDate but keeps the OLD code (you then debug 'phantom' errors). To change a block: delete it first (InvokeObject methodName=Delete, instance DB first), then regenerate. (ImportFromDocuments/.s7dcl DOES overwrite with importOption=Override.)
+Skeleton (block names in English; for a .s7dcl Chinese comments are fine, but in a .scl external source keep comments ASCII unless the file has a BOM):
   FUNCTION_BLOCK ""FB_Name""
   { S7_Optimized_Access := 'TRUE' }
   VERSION : 0.1
@@ -110,9 +111,9 @@ Order matters: create/complete the PLC side FIRST (tags/DB must exist), then HMI
 
             ["errors"] =
 @"COMMON ERRORS → EXACT FIX (all seen on real machines):
-- 'Block not found' → name mismatch. GetBlocks/GetProjectTree for real names; root-level blocks may be addressed with or without the 'Program blocks' prefix.
+- 'Block not found' → name mismatch. GetBlocks/GetProjectTree for real names. ROOT-LEVEL blocks must use the BARE name (adding a 'Program blocks/' prefix fails — that container is NOT part of the path); only user-created subgroups are part of the path (e.g. '03_AutoControl/A3_6_SpeedCtrl').
 - 'The engineering version Vxx is not supported' → importing XML from another TIA version; the server normalizes this automatically on ImportBlock/ImportType — if you built the XML yourself, do not write <Engineering version> at all, or re-import through the provided Build*Xml tools.
-- Chinese text becomes '???' → wrong encoding. XML/.s7dcl need UTF-8 WITH BOM; .scl external source needs UTF-8 WITHOUT BOM.
+- Chinese text becomes '???' / mojibake / bogus 'BEGIN invalid' → wrong encoding. XML/.s7dcl need UTF-8 WITH BOM. A .scl external source is no-BOM ONLY when ASCII-only; a .scl WITH Chinese must have a BOM (utf-8-sig) or keep comments ASCII — otherwise it is read as GBK and the parser reports a mis-located fake syntax error.
 - 'not supported in online mode' → GoOffline(softwarePath), retry the export/import.
 - 'PLC_1 NotFound' → softwarePath must be the PLC software name from GetProjectTree, not 'PLC_1' guessed, not the station name.
 - Compile errors after import → CompileAndDiagnosePlc returns structured diagnostics; fix the source text and re-import the same block (overwrite), do not create renamed copies.
