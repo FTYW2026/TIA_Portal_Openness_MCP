@@ -28,6 +28,14 @@ namespace TiaMcpServer.ModelContextProtocol
             if (Has(m, "already open") || Has(m, "opened by") || Has(m, "in use by another"))
                 return Tip("the project is already open elsewhere — use AttachToOpenProject(projectName) instead of OpenProject.");
 
+            // stale handle after project switch / TIA UI opened the project (very common)
+            if (Has(m, "disposed"))
+                return Tip("the software/project handle went stale (you switched project, or the TIA UI opened it). Re-bind with AttachToOpenProject(projectName) or GetProjectTree, then retry — do not reuse the old handle.");
+
+            // online-mode lock (export/import/compile require offline)
+            if (Has(m, "online mode") || Has(m, "not permitted in online") || Has(m, "supported in online"))
+                return Tip("this operation needs the target offline. Call GoOfflineAll (releases the UI's online session and all others) or GoOffline(softwarePath), then retry.");
+
             // name / path not found  -> covers the wrong-softwarePath / wrong-block-name case
             if (Has(m, "not found") || Has(m, "does not exist") || Has(m, "could not be found") ||
                 Has(m, "no such") || Has(m, "unable to locate") || Has(m, "cannot find"))
